@@ -202,9 +202,12 @@
   // Dot sizes. 'in' (the default, as in the skills graph it came from): how many skills link to it.
   // 'named': every sentence that names it. 'out': how many skills it names. 'same': one size.
   SM.SIZES = { in: 'Linked from', named: 'Times named', out: 'Links out', same: 'Same size' };
-  function dotSizes(map, w, by) {
-    const val = (i) => (by === 'named' ? w.inn[i].reduce((a, k) => a + map.links[k].n, 0) : by === 'out' ? w.out[i].length : w.inn[i].length);
-    const vals = map.nodes.map((_, i) => val(i));
+  SM.dotValue = function (map, i, by) {
+    const w = wire(map);
+    return by === 'named' ? w.inn[i].reduce((a, k) => a + map.links[k].n, 0) : by === 'out' ? w.out[i].length : w.inn[i].length;
+  };
+  function dotSizes(map, by) {
+    const vals = map.nodes.map((_, i) => SM.dotValue(map, i, by));
     const max = Math.max(1, ...vals);
     return map.nodes.map((n, i) => {
       if (n.k === 'start') return 6.5;
@@ -213,10 +216,6 @@
       return Math.min(6, 2.6 + 0.8 * Math.sqrt(vals[i]));
     });
   }
-  SM.dotValue = function (map, i, by) {
-    const w = wire(map);
-    return by === 'named' ? w.inn[i].reduce((a, k) => a + map.links[k].n, 0) : by === 'out' ? w.out[i].length : w.inn[i].length;
-  };
 
   // Times for SMIL keyTimes: each between 0 and 1 and never smaller than the one before.
   function kt(list) {
@@ -312,7 +311,7 @@
     h += edges.map((e) => e[1]).join('');
     h += names.map((b) => b.html).join('');
 
-    const dotRs = dotSizes(map, w, o.sizeBy).map((r) => r * sc);
+    const dotRs = dotSizes(map, o.sizeBy).map((r) => r * sc);
     if (o.animate) h += focus == null ? pulses(map, L, paths, dotRs, t) : focusPulses(map, L, R, paths, dotRs, t);
 
     // Dots and labels.
@@ -338,11 +337,11 @@
   };
 
   // Image sizes. readme: for a GitHub README. square: a LinkedIn or social post. wide: 16:9 for slides and link previews.
-  // k scales the text and dots. A wide image keeps the ring between its title and key.
+  // k scales the text and dots. top keeps the labels clear of the title and subtitle.
   SM.FORMATS = {
     readme: { W: 900, H: 940, k: 1, top: 70, bottom: 46, labelMax: 25 },
     square: { W: 1200, H: 1200, k: 1.25, top: 92, bottom: 60, labelMax: 25 },
-    wide: { W: 1200, H: 675, k: 1, top: 18, bottom: 18, labelMax: 20 },
+    wide: { W: 1200, H: 675, k: 1, top: 70, bottom: 18, labelMax: 20 },
   };
   // An image of the map on its own card, with a title, a small key and the Skill Map name.
   // o: { format, theme, sizeBy, mentions, labels, show, animate (default true), focus (a skill's name), title, png }.
@@ -350,7 +349,9 @@
   SM.image = function (map, o) {
     o = o || {};
     const f = SM.FORMATS[o.format] || SM.FORMATS.readme, t = theme(o.theme), k = f.k, W = f.W, H = f.H;
-    const shown = SM.derive(map, o);
+    let shown = SM.derive(map, o);
+    // A lit skill stays in the image even when "only skills with links" would leave it out.
+    if (o.focus && !shown.nodes.some((n) => n.id === o.focus) && map.nodes.some((n) => n.id === o.focus)) shown = SM.derive(map, Object.assign({}, o, { show: 'all' }));
     const title = o.title || SM.title(map);
     const nSkills = map.nodes.filter((n) => n.k === 'skill').length, nl = map.links.length;
     let sub = nSkills + (nSkills === 1 ? ' skill, ' : ' skills, ') + nl + (nl === 1 ? ' link' : ' links');
@@ -364,10 +365,10 @@
     const y = H - 22 * k, fs = r1(12 * k), x = (v) => r1(28 * k + v * k);
     // The key lists only what the image shows.
     let key = '<g font-size="' + fs + '" fill="' + t.t3 + '">', at = 0;
-    const line = (dash, stroke, text) => { key += '<path d="M' + x(at) + ' ' + r1(y - 4 * k) + 'h' + r1(18 * k) + '" stroke="' + stroke + '" stroke-width="1.2"' + (dash ? ' stroke-dasharray="3 3"' : '') + '/><text x="' + x(at + 24) + '" y="' + r1(y) + '">' + text + '</text>'; at += 24 + text.length * 7 + 18; };
-    if (shown.links.some((l) => l.load)) line(false, t.key, 'Hands off');
-    if (shown.links.some((l) => !l.load)) line(true, t.keyM, 'Mentions');
-    if ((animate || focus >= 0) && shown.links.length) key += '<circle cx="' + x(at + 4) + '" cy="' + r1(y - 4 * k) + '" r="' + r1(3 * k) + '" fill="' + t.blue + '"/><text x="' + x(at + 14) + '" y="' + r1(y) + '">' + (focus >= 0 ? 'Its chain' : 'A chain running') + '</text>';
+    const line = (dash, stroke, text, width) => { key += '<path d="M' + x(at) + ' ' + r1(y - 4 * k) + 'h' + r1(18 * k) + '" stroke="' + stroke + '" stroke-width="1.2"' + (dash ? ' stroke-dasharray="3 3"' : '') + '/><text x="' + x(at + 24) + '" y="' + r1(y) + '">' + text + '</text>'; at += width; };
+    if (shown.links.some((l) => l.load)) line(false, t.key, 'Hands off', 96);
+    if (shown.links.some((l) => !l.load)) line(true, t.keyM, 'Mentions', 98);
+    if ((animate || focus >= 0) && shown.links.length) key += '<circle cx="' + x(at) + '" cy="' + r1(y - 4 * k) + '" r="' + r1(3 * k) + '" fill="' + t.blue + '"/><text x="' + x(at + 10) + '" y="' + r1(y) + '">' + (focus >= 0 ? 'Its chain' : 'A chain running') + '</text>';
     key += '</g>';
     const brand = '<text x="' + r1(W - 28 * k) + '" y="' + r1(y) + '" text-anchor="end" font-size="' + r1(13 * k) + '" font-weight="600" fill="' + t.t2 + '">Skill Map<tspan fill="' + t.blue + '">.</tspan></text>';
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Skill map of ' + esc(title) + ': ' + esc(sub) + '">' +

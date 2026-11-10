@@ -13,6 +13,13 @@ const names = process.argv.slice(2).length ? process.argv.slice(2) : ['chromium'
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-map-browser-'));
 await run([TRIP, '--out', out], { log: () => {} });
 fs.writeFileSync(path.join(out, 'img.html'), '<!doctype html><img id="i" src="skill-map.svg" alt="">');
+// A big repo: 65 skills, three hand-offs and no mentions, so it starts with only the four linked skills.
+const BIG = path.join(out, 'big-src');
+for (let i = 0; i < 65; i++) {
+  fs.mkdirSync(path.join(BIG, 's' + i), { recursive: true });
+  fs.writeFileSync(path.join(BIG, 's' + i, 'SKILL.md'), '---\nname: s' + i + '\n---\n' + (i < 3 ? 'Then use the `s' + (i + 1) + '` skill.' : 'x'));
+}
+await run([BIG, '--out', out, '--name', 'big', '--only', 'page'], { log: () => {} });
 const url = (f) => pathToFileURL(path.join(out, f)).href;
 
 let failed = 0;
@@ -70,6 +77,11 @@ for (const name of names) {
     check('saves the README SVG', dl.suggestedFilename() === 'skill-map.svg' && svgOut.includes('<animateMotion') && svgOut.includes('viewBox="0 0 900 940"'));
     await page.keyboard.press('Escape');
     check('Escape closes the image maker', !(await page.evaluate(() => document.getElementById('studio').open)));
+    // A shared link to a skill with no links, in a big repo, still opens it. A repo with no mentions hides that switch.
+    await page.goto(url('big.html') + '#s40');
+    await page.waitForSelector('#panel.open');
+    check('a link to a lone skill opens it', (await page.textContent('#panel h2')) === 's40' && (await page.locator('#map .sm-n').count()) === 65);
+    check('no mentions switch without mentions', await page.locator('#swMent').isHidden());
     await page.goto(url('img.html'));
     const w = await page.evaluate(() => new Promise((r) => { const im = document.getElementById('i'); if (im.complete && im.naturalWidth) r(im.naturalWidth); else { im.onload = () => r(im.naturalWidth); im.onerror = () => r(0); } }));
     check('the image loads in an <img>', w === 900);

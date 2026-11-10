@@ -243,14 +243,16 @@ body:not(.has-map) .status{top:auto;bottom:60px;transform:translateX(-50%)}
     const id = S.sel != null && S.map ? S.map.nodes[S.sel].id : null;
     S.map = SM.derive(S.full, { mentions: S.mentions, show: S.trim ? 'linked' : 'all' });
     S.hover = null;
-    // The switch shows only when some skill has no links.
+    // Each switch shows only when it can change something: some skill has no links, or the repo has both kinds of link.
     $('#swTrim').hidden = !SM.hasLonely(SM.derive(S.full, { mentions: S.mentions, show: 'all' }));
+    $('#swMent').hidden = !bothKinds(S.full);
     setSwitch($('#swTrim'), S.trim); setSwitch($('#swMent'), S.mentions);
     $('#sizeSeg').querySelectorAll('[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === S.sizeBy)));
     const i = id ? S.map.nodes.findIndex((n) => n.id === id) : -1;
     if (i >= 0) { S.sel = i; openPanel(i); } else closePanel();
     draw();
   }
+  const bothKinds = (map) => map.links.some((l) => l.load) && map.links.some((l) => !l.load);
   function setSwitch(el, on) { el.setAttribute('aria-checked', String(!!on)); }
   function bindSwitch(el, fn) {
     el.addEventListener('click', fn);
@@ -271,16 +273,18 @@ body:not(.has-map) .status{top:auto;bottom:60px;transform:translateX(-50%)}
     try { want = decodeURIComponent(location.hash.slice(1)); } catch (e) { want = ''; }
     S.full = map; S.sel = null; S.hover = null; S.map = null;
     S.trim = SM.crowded(SM.derive(map, { mentions: S.mentions, show: 'all' }));
-    rebuild();
+    // A shared link to a skill with no links shows every skill, so the link still opens it.
+    if (S.trim && want && map.nodes.some((n) => n.id === want) && !SM.derive(map, { mentions: S.mentions, show: 'linked' }).nodes.some((n) => n.id === want)) S.trim = false;
+    // The page takes its map layout first, so the one drawing in rebuild() has the stage's final size.
     document.body.classList.add('has-map');
     $('#dock').hidden = false;
     status(null);
+    rebuild();
     const nSkills = map.nodes.filter((n) => n.k === 'skill').length;
     $('#count').textContent = title(map) + ', ' + nSkills + ' skills, ' + map.links.length + ' links';
     document.title = title(map) + ' · Skill Map';
     svg.setAttribute('aria-label', 'Skill map of ' + title(map) + ': ' + nSkills + ' skills and ' + map.links.length + ' links');
     $('#repo').value = map.src && map.src.repo ? title(map) : '';
-    draw();
     const i = want ? S.map.nodes.findIndex((n) => n.id === want) : -1;
     if (i >= 0) select(i);
     if (map.stats && map.stats.capped) toast('Very big repo: ' + map.stats.capped + ' files past the limit were left out');
@@ -458,6 +462,7 @@ body:not(.has-map) .status{top:auto;bottom:60px;transform:translateX(-50%)}
     $('#stFocus').hidden = S.sel == null;
     if (S.sel != null) $('#stFocusName').textContent = S.map.nodes[S.sel].id;
     $('#stTrim').hidden = !SM.hasLonely(S.full);
+    $('#stMent').hidden = !bothKinds(S.full);
     preview();
     studio.showModal();
   }
@@ -468,7 +473,7 @@ body:not(.has-map) .status{top:auto;bottom:60px;transform:translateX(-50%)}
   [['#stMent', 'mentions'], ['#stLabels', 'labels'], ['#stTrim', 'trim'], ['#stMove', 'move'], ['#stFocus', 'focus']].forEach(([id, k]) => bindSwitch($(id), () => { ST[k] = !ST[k]; preview(); }));
   $('#stTitleIn').addEventListener('input', (e) => { ST.title = e.target.value; preview(); });
   // A README image keeps the name the README line uses. The others say what they are.
-  const fileName = (ext) => 'skill-map' + (ST.format === 'readme' ? '' : '-' + ST.format) + (ST.focus && S.sel != null ? '-' + S.map.nodes[S.sel].id.replace(/[^\w-]+/g, '') : '') + '.' + ext;
+  const fileName = (ext) => 'skill-map' + (ST.format === 'readme' ? '' : '-' + ST.format) + (ST.focus && S.sel != null ? '-' + S.map.nodes[S.sel].id.replace(/[^\p{L}\p{N}_-]+/gu, '') : '') + '.' + ext;
   function save(blob, name) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;

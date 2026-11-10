@@ -214,6 +214,15 @@ test('the image is small, moves only when asked, and its animations are well for
   assert.equal(SM.image(map), moving);
 });
 
+// The default README image is locked. It matched the images made before the image options were added, apart from
+// the group names' font size moving into each tag. To accept a change on purpose: UPDATE_GOLDEN=1 node --test tests
+test('the default README image looks the same as before', async () => {
+  const golden = path.join(HERE, 'fixtures', 'trip-default.svg');
+  const now = SM.image(await mapOf(TRIP));
+  if (process.env.UPDATE_GOLDEN) fs.writeFileSync(golden, now);
+  assert.equal(now, fs.readFileSync(golden, 'utf8'));
+});
+
 test('image options change the size, colours, dots, lines, names and the lit skill', async () => {
   const map = await mapOf(TRIP);
   const viewBox = (svg) => svg.match(/viewBox="([^"]+)"/)[1];
@@ -236,6 +245,8 @@ test('image options change the size, colours, dots, lines, names and the lit ski
   assert.equal(checkAnimations(png), 0);
   assert.ok(!png.includes('rx="14"'));
   assert.ok(SM.image(map, { title: 'My <trip>' }).includes('>My &lt;trip&gt;<'));
+  // In every format the labels start below the subtitle, whose baseline is at 61.
+  for (const [name, f] of Object.entries(SM.FORMATS)) assert.ok(f.top >= 64 * f.k, name + ' leaves room for the title');
 });
 
 test('a lit skill shows its chain step by step, and the skills that link to it', async () => {
@@ -260,6 +271,10 @@ test('a big repo shows only its skills with links, renumbered', () => {
   assert.deepEqual(small.links.map((l) => [l.s, l.t]), [[0, 1], [1, 2], [2, 3]]);
   assert.match(SM.image(map), /Showing the 4 with links/);
   assert.equal((SM.image(map, { show: 'all' }).match(/class="sm-n"/g) || []).length, SM.CROWDED + 5);
+  // A lit skill with no links brings back every skill rather than vanish.
+  const lone = SM.image(map, { focus: 's40' });
+  assert.ok(lone.includes('The chains from s40.') && lone.includes('>s40<'));
+  assert.equal((lone.match(/class="sm-n"/g) || []).length, SM.CROWDED + 5);
   // A big repo with no links at all shows every skill rather than none.
   const none = SM.scan(files.map((f) => ({ path: f.path, text: '---\nname: ' + f.path.split('/')[0] + '\n---\nx' })));
   assert.ok(!SM.crowded(none));

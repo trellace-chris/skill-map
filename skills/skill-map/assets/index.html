@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skill Map</title>
+<meta name="description" content="See how the skills in any repo call each other.">
+<style>
+:root{
+  --bg:#08090a;--raise:#0f1011;
+  --s1:rgba(255,255,255,.022);--s2:rgba(255,255,255,.045);--s3:rgba(255,255,255,.07);
+  --b1:rgba(255,255,255,.07);--b2:rgba(255,255,255,.12);
+  --t1:#f7f8f8;--t2:#a4a8b0;--t3:#80858e;
+  --blue:#1d89bd;--blue-hi:#4aa8d8;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--t2);font:400 14px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+body::before{content:"";position:fixed;left:0;right:0;top:0;height:520px;background:radial-gradient(55% 100% at 50% 0%,rgba(255,255,255,.05),transparent 70%);pointer-events:none;z-index:0}
+button,input{font-family:inherit}
+:focus-visible{outline:2px solid var(--blue-hi);outline-offset:2px}
+a{color:var(--blue-hi);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.tb{position:fixed;top:0;left:0;right:0;height:60px;z-index:20;display:grid;grid-template-columns:1fr minmax(0,560px) 1fr;align-items:center;gap:16px;padding:0 20px;background:rgba(8,9,10,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--b1)}
+.brand{color:var(--t1);font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.brand:hover{text-decoration:none}
+.stop{color:var(--blue)}
+.go{display:flex;gap:6px;min-width:0}
+.go input{flex:1;min-width:0;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:14px;padding:8px 12px;outline:none;transition:border-color 140ms var(--ease)}
+.go input:focus{border-color:var(--blue-hi)}
+.go input::placeholder,.search input::placeholder{color:var(--t3)}
+.right{display:flex;justify-content:flex-end;min-width:0}
+.count{color:var(--t3);font-size:13px;font-feature-settings:"tnum";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.ghost,.primary{appearance:none;border:0;font:500 13px/1 var(--font);padding:9px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;transition:background 140ms var(--ease),color 140ms var(--ease)}
+.ghost{background:transparent;color:var(--t2)}
+.ghost:hover{background:var(--s2);color:var(--t1)}
+.primary{background:var(--t1);color:var(--bg)}
+.primary:hover{background:#fff}
+.pick input{display:none}
+
+#stage{position:fixed;top:60px;left:0;right:0;bottom:0;z-index:1}
+#map{display:block;width:100%;height:100%}
+#map .sm-n{cursor:pointer}
+
+.hero{position:fixed;top:60px;left:0;right:0;bottom:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+.hero h1{color:var(--t1);font-size:32px;font-weight:600;letter-spacing:-.02em;margin:0 0 12px;line-height:1.2}
+.hero p{max-width:520px;margin:0 0 22px}
+.ex{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:620px}
+.ex button{border:1px solid var(--b1)}
+body.has-map .hero{display:none}
+
+.status{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;background:var(--raise);border:1px solid var(--b2);border-radius:10px;padding:14px 18px;color:var(--t1);max-width:440px;text-align:center}
+.status.err{border-color:rgba(255,120,100,.4)}
+body:not(.has-map) .status{top:auto;bottom:60px;transform:translateX(-50%)}
+
+.dock{position:fixed;top:76px;left:16px;width:268px;z-index:10;background:var(--raise);border:1px solid var(--b1);border-radius:10px;padding:10px}
+.search{position:relative}
+.search input{width:100%;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:14px;padding:8px 12px;outline:none}
+.search input:focus{border-color:var(--blue-hi)}
+.results{list-style:none;margin:6px 0 0;padding:0;max-height:300px;overflow:auto}
+.results li{padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--t2);display:flex;justify-content:space-between;gap:8px}
+.results li:hover,.results li.on{background:var(--s2);color:var(--t1)}
+.results .g{color:var(--t3);font-size:12px}
+.rowsw{display:flex;align-items:center;justify-content:space-between;padding:9px 4px 4px;cursor:pointer;color:var(--t2);user-select:none}
+.sw{width:30px;height:18px;border-radius:9px;background:var(--s3);position:relative;transition:background 140ms var(--ease)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--t3);transition:transform 160ms var(--ease),background 160ms var(--ease)}
+.rowsw[aria-checked="true"] .sw{background:var(--blue)}
+.rowsw[aria-checked="true"] .sw::after{transform:translateX(12px);background:#fff}
+.acts{display:flex;flex-direction:column;gap:2px;margin-top:6px;padding-top:6px;border-top:1px solid var(--b1)}
+.acts .ghost{justify-content:flex-start}
+.key{margin-top:8px;padding:8px 4px 0;border-top:1px solid var(--b1);font-size:12px;color:var(--t3);display:grid;gap:5px}
+.key i{display:inline-block;width:18px;vertical-align:middle;margin-right:8px;border-top:1.5px solid rgba(255,255,255,.4)}
+.key i.m{border-top-style:dashed;border-color:rgba(255,255,255,.3)}
+.key i.b{border-color:var(--blue-hi);border-top-width:2px}
+.key i.g{border-color:#c9ccd1}
+
+.panel{position:fixed;top:76px;right:16px;bottom:16px;width:384px;z-index:10;overflow:auto;background:var(--raise);border:1px solid var(--b2);border-radius:14px;padding:18px 20px 22px;opacity:0;transform:translateX(10px);pointer-events:none;transition:opacity 180ms var(--ease),transform 180ms var(--ease)}
+.panel.open{opacity:1;transform:none;pointer-events:auto}
+.panel .x{position:absolute;top:12px;right:12px;padding:6px 9px}
+.panel h2{color:var(--t1);font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0 30px 2px 0;word-break:break-word}
+.panel .meta{color:var(--t3);font-size:12.5px;margin-bottom:12px}
+.panel .desc{margin:0 0 12px;color:var(--t2)}
+.panel h3{color:var(--t3);font-size:12px;font-weight:500;margin:18px 0 6px;text-transform:none}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.chain .arr{color:var(--t3)}
+.lk{appearance:none;border:0;background:none;padding:0;color:var(--t1);font:500 13.5px var(--font);cursor:pointer;text-align:left}
+.lk:hover{color:var(--blue-hi)}
+.item{padding:8px 0;border-top:1px solid var(--b1)}
+.item:first-of-type{border-top:0}
+.item .q{color:var(--t2);font-size:13px;margin-top:2px}
+.item .at{color:var(--t3);font-size:12px}
+.tag{display:inline-block;font-size:11px;color:var(--t3);border:1px solid var(--b2);border-radius:5px;padding:0 5px;margin-left:6px;vertical-align:1px}
+
+.tip{position:fixed;z-index:40;pointer-events:none;max-width:300px;background:var(--raise);border:1px solid var(--b2);border-radius:8px;padding:8px 10px;font-size:12.5px;opacity:0;transition:opacity 120ms var(--ease)}
+.tip.on{opacity:1}
+.tip .t{color:var(--t1);font-weight:600}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(8px);z-index:50;background:var(--t1);color:var(--bg);font-weight:500;border-radius:8px;padding:8px 14px;opacity:0;pointer-events:none;transition:opacity 160ms var(--ease),transform 160ms var(--ease)}
+#toast.on{opacity:1;transform:translateX(-50%)}
+
+.ghost[aria-expanded="true"]{background:var(--s3);color:var(--t1)}
+.wide{width:100%;justify-content:space-between;margin-top:4px}
+.filters{padding:2px 2px 4px}
+.lbl{display:block;color:var(--t3);font-size:12px;margin:10px 2px 6px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:3px;border:1px solid var(--b1);border-radius:9px;background:var(--s1)}
+.seg.three{grid-template-columns:1fr 1fr 1fr}
+.seg .ghost{justify-content:center;padding:7px 6px;font-size:12.5px}
+.seg .ghost[aria-pressed="true"]{background:var(--s3);color:var(--t1)}
+
+/* Image maker */
+#studio{width:min(1120px,94vw);height:min(780px,92vh);max-width:none;max-height:none;padding:0;border:1px solid var(--b2);border-radius:14px;background:var(--raise);color:var(--t2);overflow:hidden}
+#studio::backdrop{background:rgba(0,0,0,.62)}
+.st{display:grid;grid-template-columns:320px 1fr;height:100%}
+.st-opts{padding:20px 20px 18px;overflow:auto;border-right:1px solid var(--b1)}
+.st-opts h2{color:var(--t1);font-size:18px;font-weight:600;margin:0 0 4px}
+.field{width:100%;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:14px;padding:8px 12px;outline:none}
+.field:focus{border-color:var(--blue-hi)}
+.st-acts{display:flex;gap:6px;margin-top:14px}
+.st-acts button{flex:1;justify-content:center}
+.note{color:var(--t3);font-size:12px;margin:10px 2px 0}
+.st-pv{display:flex;align-items:center;justify-content:center;padding:24px;min-height:0;background:repeating-conic-gradient(rgba(255,255,255,.025) 0 25%,transparent 0 50%) 0 0/20px 20px}
+.st-pv img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+#studio .x{position:absolute;top:10px;right:10px;padding:6px 9px}
+
+@media (max-width:760px){
+  .st{grid-template-columns:1fr;grid-template-rows:auto minmax(320px,1fr);overflow:auto}
+  .st-opts{border-right:0;border-bottom:1px solid var(--b1);overflow:visible}
+  .tb{grid-template-columns:auto 1fr;gap:10px;padding:0 12px}
+  .right,.pick{display:none}
+  .dock{top:auto;bottom:12px;left:12px;right:12px;width:auto;padding:8px}
+  .dock .acts,.dock .key,.dock .rowsw{display:none}
+  .panel{top:auto;left:8px;right:8px;bottom:8px;width:auto;max-height:62vh}
+  .hero h1{font-size:25px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="tb">
+  <a class="brand" href="./" id="brand">Skill Map<span class="stop">.</span></a>
+  <form class="go" id="go" autocomplete="off">
+    <input id="repo" placeholder="owner/repo or a GitHub link" aria-label="GitHub repo" spellcheck="false">
+    <button class="primary" type="submit">Map it</button>
+    <label class="ghost pick" title="Nothing leaves your computer">Pick a folder<input id="dir" type="file" webkitdirectory multiple></label>
+  </form>
+  <div class="right"><span class="count" id="count"></span></div>
+</header>
+<main id="stage"><svg id="map" role="img" aria-label="Skill map"></svg></main>
+<section class="hero" id="hero">
+  <h1>See how a repo's skills call each other.</h1>
+  <p>Paste a GitHub repo above, or pick a folder on your computer. No AI runs and nothing is uploaded. Your browser reads the skill files and finds every place one skill points at another.</p>
+  <div class="ex" id="examples"></div>
+</section>
+<div class="status" id="status" role="status" hidden></div>
+<aside class="dock" id="dock" hidden>
+  <div class="search"><input id="q" type="search" placeholder="Find a skill  /" aria-label="Find a skill" autocomplete="off" spellcheck="false"></div>
+  <ul class="results" id="results" role="listbox" aria-label="Matching skills"></ul>
+  <div class="rowsw" role="switch" tabindex="0" id="swPlay" aria-checked="true"><span>Play chains</span><span class="sw"></span></div>
+  <button class="ghost wide" id="filtersBtn" aria-expanded="false" aria-controls="filters">Filters</button>
+  <div class="filters" id="filters" hidden>
+    <div class="lbl">Size dots by</div>
+    <div class="seg" id="sizeSeg" role="group" aria-label="Size dots by"></div>
+    <div class="rowsw" role="switch" tabindex="0" id="swMent" aria-checked="true"><span>Show mentions</span><span class="sw"></span></div>
+    <div class="rowsw" role="switch" tabindex="0" id="swTrim" aria-checked="false" hidden><span>Hide skills with no links</span><span class="sw"></span></div>
+  </div>
+  <div class="acts">
+    <button class="ghost" id="makeImg">Make an image</button>
+    <button class="ghost" id="copyMd">Copy the README line</button>
+  </div>
+  <div class="key">
+    <span><i></i>Hands off to the skill</span>
+    <span><i class="m"></i>Mentions it</span>
+    <span><i class="b"></i>Its chain, fainter each step</span>
+    <span><i class="g"></i>Skills that link to it</span>
+  </div>
+</aside>
+<aside class="panel" id="panel" aria-label="Skill"></aside>
+<dialog id="studio" aria-labelledby="stTitle">
+  <div class="st">
+    <div class="st-opts">
+      <h2 id="stTitle">Make an image</h2>
+      <div class="lbl">Format</div>
+      <div class="seg three" id="stFormat" role="group" aria-label="Format">
+        <button class="ghost" data-v="readme" title="900 by 940, for a GitHub README">README</button><button class="ghost" data-v="square" title="1200 by 1200, for LinkedIn and other posts">Square</button><button class="ghost" data-v="wide" title="1200 by 675, for slides and link previews">Wide</button>
+      </div>
+      <div class="lbl">Colours</div>
+      <div class="seg" id="stTheme" role="group" aria-label="Colours"><button class="ghost" data-v="dark">Dark</button><button class="ghost" data-v="light">Light</button></div>
+      <div class="lbl">Size dots by</div>
+      <div class="seg" id="stSize" role="group" aria-label="Size dots by"></div>
+      <label class="lbl" for="stTitleIn">Title</label>
+      <input class="field" id="stTitleIn" autocomplete="off" spellcheck="false">
+      <div class="rowsw" role="switch" tabindex="0" id="stFocus" aria-checked="false" hidden><span>Light up <b id="stFocusName"></b></span><span class="sw"></span></div>
+      <div class="rowsw" role="switch" tabindex="0" id="stMent" aria-checked="true"><span>Show mentions</span><span class="sw"></span></div>
+      <div class="rowsw" role="switch" tabindex="0" id="stLabels" aria-checked="true"><span>Skill names</span><span class="sw"></span></div>
+      <div class="rowsw" role="switch" tabindex="0" id="stTrim" aria-checked="false"><span>Hide skills with no links</span><span class="sw"></span></div>
+      <div class="rowsw" role="switch" tabindex="0" id="stMove" aria-checked="true"><span>Moving chains</span><span class="sw"></span></div>
+      <div class="st-acts"><button class="primary" id="stSvg">Download SVG</button><button class="ghost" id="stPng" style="border:1px solid var(--b2)">Download PNG</button></div>
+      <p class="note">The SVG moves on GitHub. The PNG is a sharp still for LinkedIn, slides and docs.</p>
+    </div>
+    <div class="st-pv"><img id="stImg" alt="Preview of the image"></div>
+  </div>
+  <button class="ghost x" id="stClose" aria-label="Close">✕</button>
+</dialog>
+<div class="tip" id="tip"></div>
+<div id="toast" role="status"></div>
+<!--MAP-->
+<script src="scan.js"></script>
+<script src="draw.js"></script>
+<script>
+(function () {
+  'use strict';
+  const SM = window.SkillMap, $ = (s) => document.querySelector(s), esc = SM.esc;
+  const EXAMPLES = ['obra/superpowers', 'mattpocock/skills', 'coreyhaines31/marketingskills', 'addyosmani/agent-skills', 'K-Dense-AI/scientific-agent-skills'];
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // full: the map as scanned. map: as shown, after the filters. sizeBy, mentions and trim are the filters.
+  const S = { full: null, map: null, sel: null, hover: null, play: !calm, sizeBy: 'in', mentions: true, trim: false };
+  const svg = $('#map'), panel = $('#panel'), tip = $('#tip');
+  const narrow = () => innerWidth <= 760;
+
+  // ------------------------------------------------------------ drawing
+  function box() {
+    const st = $('#stage');
+    return { W: st.clientWidth, H: st.clientHeight, left: narrow() ? 0 : 300, right: S.sel != null && !narrow() ? 412 : 0, top: 4, bottom: narrow() ? 70 : 4, labelMax: narrow() ? 14 : 25 };
+  }
+  function draw() {
+    if (!S.map) return;
+    const b = box();
+    const focus = S.hover != null ? S.hover : S.sel;
+    const r = SM.render(S.map, Object.assign(b, { focus, sel: S.sel, sizeBy: S.sizeBy, animate: S.play && focus == null }));
+    svg.setAttribute('viewBox', '0 0 ' + b.W + ' ' + b.H);
+    svg.innerHTML = r.svg;
+  }
+  addEventListener('resize', draw);
+
+  const title = SM.title;
+  // ------------------------------------------------------------ filters
+  // The map as shown, keeping the open skill open when it's still there.
+  function rebuild() {
+    const id = S.sel != null && S.map ? S.map.nodes[S.sel].id : null;
+    S.map = SM.derive(S.full, { mentions: S.mentions, show: S.trim ? 'linked' : 'all' });
+    S.hover = null;
+    // The switch shows only when some skill has no links.
+    $('#swTrim').hidden = !SM.hasLonely(SM.derive(S.full, { mentions: S.mentions, show: 'all' }));
+    setSwitch($('#swTrim'), S.trim); setSwitch($('#swMent'), S.mentions);
+    $('#sizeSeg').querySelectorAll('[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === S.sizeBy)));
+    const i = id ? S.map.nodes.findIndex((n) => n.id === id) : -1;
+    if (i >= 0) { S.sel = i; openPanel(i); } else closePanel();
+    draw();
+  }
+  function setSwitch(el, on) { el.setAttribute('aria-checked', String(!!on)); }
+  function bindSwitch(el, fn) {
+    el.addEventListener('click', fn);
+    el.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); fn(); } });
+  }
+  // The size buttons, from the one list in draw.js.
+  const sizeButtons = (sel) => Object.entries(SM.SIZES).map(([v, name]) => '<button class="ghost" data-v="' + v + '" aria-pressed="' + (v === sel) + '">' + esc(name.replace(' size', '')) + '</button>').join('');
+  $('#sizeSeg').innerHTML = sizeButtons(S.sizeBy);
+  $('#sizeSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) { S.sizeBy = b.dataset.v; rebuild(); } });
+  bindSwitch($('#swMent'), () => { S.mentions = !S.mentions; rebuild(); });
+  // A big repo starts with only its skills that have links, as its README image does.
+  bindSwitch($('#swTrim'), () => { S.trim = !S.trim; rebuild(); });
+  $('#filtersBtn').addEventListener('click', () => { const f = $('#filters'); f.hidden = !f.hidden; $('#filtersBtn').setAttribute('aria-expanded', String(!f.hidden)); });
+
+  function show(map) {
+    // A link to one skill, as in #writing, is read before anything clears it.
+    let want = '';
+    try { want = decodeURIComponent(location.hash.slice(1)); } catch (e) { want = ''; }
+    S.full = map; S.sel = null; S.hover = null; S.map = null;
+    S.trim = SM.crowded(SM.derive(map, { mentions: S.mentions, show: 'all' }));
+    rebuild();
+    document.body.classList.add('has-map');
+    $('#dock').hidden = false;
+    status(null);
+    const nSkills = map.nodes.filter((n) => n.k === 'skill').length;
+    $('#count').textContent = title(map) + ', ' + nSkills + ' skills, ' + map.links.length + ' links';
+    document.title = title(map) + ' · Skill Map';
+    svg.setAttribute('aria-label', 'Skill map of ' + title(map) + ': ' + nSkills + ' skills and ' + map.links.length + ' links');
+    $('#repo').value = map.src && map.src.repo ? title(map) : '';
+    draw();
+    const i = want ? S.map.nodes.findIndex((n) => n.id === want) : -1;
+    if (i >= 0) select(i);
+    if (map.stats && map.stats.capped) toast('Very big repo: ' + map.stats.capped + ' files past the limit were left out');
+  }
+
+  // ------------------------------------------------------------ loading
+  let statusT = 0;
+  function status(msg, err) {
+    const el = $('#status');
+    clearTimeout(statusT);
+    if (!msg) { el.hidden = true; return; }
+    el.textContent = msg; el.classList.toggle('err', !!err); el.hidden = false;
+    if (err) statusT = setTimeout(() => { el.hidden = true; }, 9000);
+  }
+  let busy = false;
+  async function loadRepo(text, opts) {
+    const spec = SM.parseRepo(text);
+    if (!spec) { status("That isn't a GitHub repo. Try owner/repo, such as obra/superpowers.", true); return; }
+    if (opts) { if (opts.ref) spec.ref = opts.ref; if (opts.path) spec.path = opts.path; }
+    if (busy) return;
+    busy = true;
+    status('Reading ' + spec.owner + '/' + spec.name + '…');
+    try {
+      const src = await SM.github(spec);
+      const map = await SM.build(src.list, src.read, { src: src.src, name: spec.name, onProgress: (d, n) => status('Reading ' + d + ' of ' + n + ' files…') });
+      const q = '?repo=' + spec.owner + '/' + spec.name + (spec.ref ? '&ref=' + encodeURIComponent(spec.ref) : '') + (spec.path ? '&path=' + encodeURIComponent(spec.path) : '');
+      history.replaceState(null, '', q + location.hash);
+      show(map);
+      if (src.src.truncated) toast('GitHub sent only part of this very big repo, so some skills may be missing');
+    } catch (e) { status(e.message, true); }
+    busy = false;
+  }
+  $('#go').addEventListener('submit', (e) => { e.preventDefault(); history.replaceState(null, '', location.pathname); loadRepo($('#repo').value); });
+  $('#dir').addEventListener('change', async (e) => {
+    const fl = [...e.target.files];
+    e.target.value = '';
+    if (!fl.length) return;
+    const top = (fl[0].webkitRelativePath || fl[0].name).split('/')[0];
+    const byPath = new Map(fl.map((f) => [(f.webkitRelativePath || f.name).split('/').slice(1).join('/'), f]));
+    status('Reading ' + top + '…');
+    try {
+      const map = await SM.build([...byPath.keys()], (p) => byPath.get(p).text(), { src: { name: top }, name: top, onProgress: (d, n) => status('Reading ' + d + ' of ' + n + ' files…') });
+      history.replaceState(null, '', location.pathname);
+      show(map);
+    } catch (err) { status(err.message, true); }
+  });
+  $('#examples').innerHTML = EXAMPLES.map((r) => '<button class="ghost" data-r="' + esc(r) + '">' + esc(r) + '</button>').join('');
+  $('#examples').addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) { $('#repo').value = b.dataset.r; loadRepo(b.dataset.r); } });
+
+  // ------------------------------------------------------------ hover, click and the panel
+  let want = null, wantT = 0;
+  svg.addEventListener('mousemove', (e) => {
+    const g = e.target.closest('.sm-n');
+    const i = g ? +g.dataset.i : null;
+    // Light up a skill's chain once the pointer rests on it.
+    if (i !== want) {
+      want = i; clearTimeout(wantT);
+      if (i == null) { if (S.hover != null) { S.hover = null; draw(); } }
+      else wantT = setTimeout(() => { if (want === i) { S.hover = i; draw(); } }, calm ? 0 : 110);
+    }
+    if (i != null) tipAt(i, e.clientX, e.clientY); else tip.classList.remove('on');
+  });
+  svg.addEventListener('mouseleave', () => { want = null; clearTimeout(wantT); tip.classList.remove('on'); if (S.hover != null) { S.hover = null; draw(); } });
+  svg.addEventListener('click', (e) => {
+    const g = e.target.closest('.sm-n');
+    if (g) select(+g.dataset.i); else if (S.sel != null) closePanel(true);
+  });
+  function tipAt(i, x, y) {
+    const n = S.map.nodes[i], w = SM.wire(S.map);
+    const outs = w.out[i].length, ins = w.inn[i].length;
+    tip.innerHTML = '<div class="t">' + esc(n.id) + '</div><div>' + (n.d ? esc(n.d.length > 150 ? n.d.slice(0, 148) + '…' : n.d) + '<br>' : '') +
+      '<span style="color:var(--t3)">Links to ' + outs + ', linked from ' + ins + (S.sizeBy === 'named' ? ', named ' + SM.dotValue(S.map, i, 'named') + ' times' : '') + '</span></div>';
+    const r = tip.getBoundingClientRect();
+    tip.style.left = Math.min(innerWidth - r.width - 12, x + 14) + 'px';
+    tip.style.top = Math.min(innerHeight - r.height - 12, y + 14) + 'px';
+    tip.classList.add('on');
+  }
+  function select(i) {
+    S.sel = i; S.hover = null; tip.classList.remove('on');
+    history.replaceState(null, '', location.pathname + location.search + '#' + encodeURIComponent(S.map.nodes[i].id));
+    openPanel(i);
+    draw();
+  }
+  function closePanel(redraw) {
+    S.sel = null; panel.classList.remove('open');
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    if (redraw) draw();
+  }
+  const btn = (i) => '<button class="lk" data-i="' + i + '">' + esc(S.map.nodes[i].id) + '</button>';
+  function items(list, end) {
+    return list.map((l) => {
+      const other = l[end];
+      return '<div class="item">' + btn(other) + (l.load ? '' : '<span class="tag">mention</span>') + '<div class="q">“' + esc(l.ex) + '”</div>' +
+        (l.at && l.at !== 'main' ? '<div class="at">in ' + esc(l.at) + '</div>' : '') + '</div>';
+    }).join('');
+  }
+  function openPanel(i) {
+    const m = S.map, n = m.nodes[i], w = SM.wire(m);
+    const outs = w.out[i].map((k) => m.links[k]).sort((a, b) => b.load - a.load || b.n - a.n);
+    const ins = w.inn[i].map((k) => m.links[k]).sort((a, b) => b.load - a.load || b.n - a.n);
+    const chain = SM.longestChain(m, i);
+    const url = SM.fileUrl(m, n.f);
+    const grp = n.k === 'start' ? 'Read at session start' : m.groups.length > 1 ? (m.groups[n.g] || 'top level') : '';
+    let h = '<button class="ghost x" data-act="close" aria-label="Close">✕</button>';
+    h += '<h2>' + esc(n.id) + '</h2><div class="meta">' + (grp ? esc(grp) + ', ' : '') + 'links to ' + outs.length + ', linked from ' + ins.length + '</div>';
+    if (n.d) h += '<p class="desc">' + esc(n.d) + '</p>';
+    if (url) h += '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open ' + esc(n.f.split('/').pop()) + '</a>';
+    if (chain.length > 2) h += '<h3>Longest chain from here</h3><div class="chain">' + chain.map(btn).join('<span class="arr">→</span>') + '</div>';
+    if (outs.length) h += '<h3>Links to</h3>' + items(outs, 't');
+    if (ins.length) h += '<h3>Linked from</h3>' + items(ins, 's');
+    if (!outs.length && !ins.length) h += '<p class="desc" style="margin-top:14px">No other skill names this one, and it names none.</p>';
+    panel.innerHTML = h;
+    panel.scrollTop = 0;
+    panel.classList.add('open');
+  }
+  panel.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-i],[data-act]');
+    if (!t) return;
+    if (t.dataset.act === 'close') closePanel(true); else select(+t.dataset.i);
+  });
+
+  // ------------------------------------------------------------ search
+  const qEl = $('#q'), resEl = $('#results');
+  let found = [], active = -1;
+  function search(q) {
+    q = q.trim().toLowerCase();
+    if (!q || !S.map) return [];
+    const w = SM.wire(S.map);
+    return S.map.nodes.map((n, i) => {
+      const t = n.id.toLowerCase(), d = (n.d || '').toLowerCase();
+      let s = 0;
+      for (const word of q.split(/\s+/)) { if (t.startsWith(word)) s += 6; else if (t.includes(word)) s += 4; else if (d.includes(word)) s += 1; else return null; }
+      return [i, s + w.inn[i].length / 40];
+    }).filter(Boolean).sort((a, b) => b[1] - a[1]).slice(0, 12).map((x) => x[0]);
+  }
+  function renderResults() {
+    found = search(qEl.value); active = found.length ? 0 : -1;
+    resEl.innerHTML = found.map((i, k) => '<li role="option" data-i="' + i + '" class="' + (k === active ? 'on' : '') + '"><span>' + esc(S.map.nodes[i].id) + '</span><span class="g">' + esc(S.map.groups.length > 1 ? S.map.groups[S.map.nodes[i].g] || '' : '') + '</span></li>').join('');
+  }
+  qEl.addEventListener('input', renderResults);
+  qEl.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!found.length) return; active = (active + (e.key === 'ArrowDown' ? 1 : found.length - 1)) % found.length; [...resEl.children].forEach((li, k) => li.classList.toggle('on', k === active)); }
+    else if (e.key === 'Enter' && active >= 0) { select(found[active]); qEl.value = ''; renderResults(); qEl.blur(); }
+    else if (e.key === 'Escape') { qEl.value = ''; renderResults(); qEl.blur(); }
+  });
+  resEl.addEventListener('click', (e) => { const li = e.target.closest('[data-i]'); if (li) { select(+li.dataset.i); qEl.value = ''; renderResults(); } });
+  addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || $('#studio').open) return;
+    if (e.key === '/' && S.map) { e.preventDefault(); qEl.focus(); }
+    else if (e.key === 'Escape' && S.sel != null) closePanel(true);
+  });
+
+  // ------------------------------------------------------------ chains, image and README line
+  setSwitch($('#swPlay'), S.play);
+  bindSwitch($('#swPlay'), () => { S.play = !S.play; setSwitch($('#swPlay'), S.play); draw(); });
+
+  // ------------------------------------------------------------ image maker
+  // Starts from the page's filters and the open skill. Its own changes leave the page as it is.
+  const studio = $('#studio'), ST = {};
+  const segPick = (el, v) => el.querySelectorAll('[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  $('#stSize').innerHTML = sizeButtons('in');
+  function imageOpts(png) {
+    const focusId = ST.focus && S.sel != null ? S.map.nodes[S.sel].id : '';
+    return { format: ST.format, theme: ST.theme, sizeBy: ST.sizeBy, mentions: ST.mentions, labels: ST.labels, show: ST.trim ? 'linked' : 'all', animate: !png && ST.move, focus: focusId, title: ST.title.trim(), png };
+  }
+  function preview() {
+    segPick($('#stFormat'), ST.format); segPick($('#stTheme'), ST.theme); segPick($('#stSize'), ST.sizeBy);
+    [['#stMent', 'mentions'], ['#stLabels', 'labels'], ['#stTrim', 'trim'], ['#stMove', 'move'], ['#stFocus', 'focus']].forEach(([id, k]) => setSwitch($(id), ST[k]));
+    $('#stImg').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SM.image(S.full, imageOpts(false)));
+  }
+  function openStudio() {
+    Object.assign(ST, { format: 'readme', theme: 'dark', sizeBy: S.sizeBy, mentions: S.mentions, labels: true, trim: S.trim, move: true, focus: S.sel != null, title: SM.title(S.full) });
+    $('#stTitleIn').value = ST.title;
+    $('#stFocus').hidden = S.sel == null;
+    if (S.sel != null) $('#stFocusName').textContent = S.map.nodes[S.sel].id;
+    $('#stTrim').hidden = !SM.hasLonely(S.full);
+    preview();
+    studio.showModal();
+  }
+  $('#makeImg').addEventListener('click', openStudio);
+  $('#stClose').addEventListener('click', () => studio.close());
+  studio.addEventListener('click', (e) => { if (e.target === studio) studio.close(); });
+  [['#stFormat', 'format'], ['#stTheme', 'theme'], ['#stSize', 'sizeBy']].forEach(([id, k]) => $(id).addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) { ST[k] = b.dataset.v; preview(); } }));
+  [['#stMent', 'mentions'], ['#stLabels', 'labels'], ['#stTrim', 'trim'], ['#stMove', 'move'], ['#stFocus', 'focus']].forEach(([id, k]) => bindSwitch($(id), () => { ST[k] = !ST[k]; preview(); }));
+  $('#stTitleIn').addEventListener('input', (e) => { ST.title = e.target.value; preview(); });
+  // A README image keeps the name the README line uses. The others say what they are.
+  const fileName = (ext) => 'skill-map' + (ST.format === 'readme' ? '' : '-' + ST.format) + (ST.focus && S.sel != null ? '-' + S.map.nodes[S.sel].id.replace(/[^\w-]+/g, '') : '') + '.' + ext;
+  function save(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  $('#stSvg').addEventListener('click', () => {
+    const name = fileName('svg');
+    save(new Blob([SM.image(S.full, imageOpts(false))], { type: 'image/svg+xml' }), name);
+    toast(ST.format === 'readme' ? 'Saved ' + name + '. Put it at the top of your repo.' : 'Saved ' + name + '.');
+  });
+  // A PNG is the still image drawn at twice its size, so it stays sharp on high-density screens.
+  $('#stPng').addEventListener('click', async () => {
+    const f = SM.FORMATS[ST.format], scale = 2;
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SM.image(S.full, imageOpts(true)));
+    try {
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = f.W * scale; c.height = f.H * scale;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('no image');
+      save(blob, fileName('png'));
+      toast('Saved ' + fileName('png') + ', ' + c.width + ' by ' + c.height + '.');
+    } catch (e) { toast("This browser couldn't make a PNG. Download the SVG instead."); }
+  });
+
+  $('#copyMd').addEventListener('click', async () => {
+    const line = SM.readme(S.full);
+    const s = S.full.src || {};
+    try { await navigator.clipboard.writeText(line); toast(s.repo || s.github ? 'Copied. Paste it into your README.' : 'Copied. Its link opens Skill Map, since a folder has no live map.'); }
+    catch (e) { window.prompt('Copy this line into your README:', line); }
+  });
+  let toastT = 0;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+
+  // ------------------------------------------------------------ start
+  // A saved map from the Node script, or ?repo= in the address.
+  if (window.SKILL_MAP) show(window.SKILL_MAP);
+  else {
+    const p = new URLSearchParams(location.search);
+    if (p.get('repo')) { $('#repo').value = p.get('repo'); loadRepo(p.get('repo'), { ref: p.get('ref'), path: p.get('path') }); }
+  }
+  window.app = { S, ST, draw, select, loadRepo, show, openStudio };
+})();
+</script>
+</body>
+</html>

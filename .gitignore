@@ -1,0 +1,4 @@
+node_modules/
+/skill-map/
+/*.html
+.DS_Store
